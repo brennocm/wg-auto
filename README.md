@@ -1,6 +1,6 @@
 
 <div align="center">
-    <img src="other/logo-wgauto.png" alt="logo" width="200px">
+    <img src="src/logo-wgauto.png" alt="logo" width="200px">
    <br><br>
     <h1 align="center"> WG-Auto: Automating WireGuard VPN setup</h1>
 </div>
@@ -103,11 +103,7 @@ PersistentKeepalive = 25
 
 ### Usage process
 
-<br>
-
-<video controls>
-  <source src="other/example-video.mp4" type="video/mp4">
-</video>
+[Video usage process](https://youtu.be/Nr_En-eo2c0)
 
 ### Notes
 
