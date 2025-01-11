@@ -111,7 +111,7 @@ get_network_address() {
 setup_wireguard() {
     local MAIN_INTERFACE=$(get_main_interface)
     local NETWORK_ADDRESS=$(get_network_address "$MAIN_INTERFACE")
-    local WG_IP="10.10.10.2"  # WireGuard server IP
+    local WG_IP="10.10.10.1"  # WireGuard server IP
     local CLIENT_IP="10.10.10.2"  # First client IP
     local IP_PUBLIC=$(get_public_ip)
 

@@ -74,6 +74,7 @@ validate_port() {
     fi
 }
 
+# Function to validate public ip
 get_public_ip() {
     local public_ip=$(curl -s https://api.ipify.org)
     
@@ -84,6 +85,29 @@ get_public_ip() {
     
     echo "$public_ip"
 }
+
+
+# Function to configure dns
+configure_resolvconf() {
+    separator "Configuring /etc/resolv.conf"
+    info_message "Setting up DNS servers in /etc/resolv.conf..."
+
+    systemctl stop systemd-resolved
+    systemctl disable systemd-resolved
+    
+    echo -e "nameserver 8.8.8.8\nnameserver 1.1.1.1" > /etc/resolv.conf
+
+    systemctl enable resolvconf
+    systemctl start resolvconf
+    export PATH=$PATH:/usr/sbin
+    
+    resolvconf -u || {
+        error_message "Failed to apply DNS configuration"
+        exit 1
+    }
+    success_message "DNS servers configured successfully"
+}
+
 
 # Function to setup WireGuard client
 setup_wireguard_client() {
@@ -102,10 +126,11 @@ setup_wireguard_client() {
         error_message "curl install failed"
         exit 1
     }
-    apt apt install resolvconf -y || {
-        error_message "curl install failed"
+    apt install resolvconf -y || {
+        error_message "resolvconf install failed"
         exit 1
     }
+    configure_resolvconf
     success_message "installation of dependencies successfully"
 
     separator "WireGuard Client Setup"
@@ -115,11 +140,6 @@ setup_wireguard_client() {
         info_message "Installing WireGuard..."
         if [ -f /etc/debian_version ]; then
             apt update && apt install -y wireguard wireguard-tools || {
-                error_message "Failed to install WireGuard"
-                exit 1
-            }
-        elif [ -f /etc/fedora-release ]; then
-            dnf install -y wireguard-tools || {
                 error_message "Failed to install WireGuard"
                 exit 1
             }
@@ -186,10 +206,16 @@ setup_wireguard_client() {
     # Create client configuration
     separator "Client Configuration"
     info_message "Creating client configuration..."
+
+        cd "$CLIENT_DIR" || {
+        error_message "Failed to access $CLIENT_DIR"
+        exit 1
+    }
+
     cat > "$CLIENT_DIR/wg0.conf" << EOF
 [Interface]
 PrivateKey = ${CLIENT_PRIVATE_KEY}
-Address = ${$PRIVATE_IP}
+Address = ${PRIVATE_IP}
 DNS = 8.8.8.8, 8.8.4.4
 
 [Peer]
@@ -223,8 +249,8 @@ EOF
     separator "Setup Complete"
     success_message "WireGuard client setup completed successfully!"
     info_message "Configuration file location: $CLIENT_DIR/wg0.conf"
-    info_message "My actual IP: $IP_PUBLIC"
-
+    info_message "To disable the VPN: sudo wg-quick down wg0"
+    info_message "To enable the VPN: sudo wg-quick up wg0"
 }
 
 # Main execution
