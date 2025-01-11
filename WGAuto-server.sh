@@ -23,6 +23,7 @@ GREEN="\e[32m"
 RED="\e[31m"
 YELLOW="\e[33m"
 CYAN="\e[36m"
+RESET="\e[0m"
 
 
 # Success message
@@ -65,6 +66,18 @@ get_main_interface() {
     echo "$interface"
 }
 
+get_public_ip() {
+    local public_ip=$(curl -s https://api.ipify.org)
+    
+    if [ -z "$public_ip" ]; then
+        error_message "Failed to determine public IP address"
+        exit 1
+    fi
+    
+    echo "$public_ip"
+}
+
+
 # Function to enable IP forwarding
 enable_ip_forwarding() {
     info_message "Enabling IP forwarding..."
@@ -81,21 +94,39 @@ enable_ip_forwarding() {
     fi
 }
 
+# Function to get the network address (IP/subnet)
+get_network_address() {
+    local interface="$1"
+    local ip_address=$(ip -4 addr show "$interface" | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1)
+    
+    if [ -z "$ip_address" ]; then
+        error_message "Could not determine IP address for $interface"
+        exit 1
+    fi
+    
+    echo "${ip_address%.*}.0/24"
+}
+
 # Main setup function
 setup_wireguard() {
     local MAIN_INTERFACE=$(get_main_interface)
-    
+    local NETWORK_ADDRESS=$(get_network_address "$MAIN_INTERFACE")
+    local WG_IP="10.10.10.2"  # WireGuard server IP
+    local CLIENT_IP="10.10.10.2"  # First client IP
+    local IP_PUBLIC=$(get_public_ip)
+
     separator "System Update"
     info_message "Updating system packages..."
     apt update && apt upgrade -y || {
         error_message "System update failed"
         exit 1
     }
+    apt install curl -y
     success_message "System updated successfully"
 
     separator "WireGuard Installation"
     info_message "Installing WireGuard..."
-    apt install -y wireguard wireguard-tools || {
+    apt install -y wireguard wireguard-tools ipcalc || {
         error_message "WireGuard installation failed"
         exit 1
     }
@@ -130,15 +161,23 @@ setup_wireguard() {
     
     cat > /etc/wireguard/wg0.conf << EOF
 [Interface]
-PrivateKey = ${PRIVATE_KEY}
-Address = 10.10.10.1/24
+PrivateKey = ${PRIVATE_KEY} 
+Address = ${WG_IP}/24
 ListenPort = 51820
 PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ${MAIN_INTERFACE} -j MASQUERADE
 PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ${MAIN_INTERFACE} -j MASQUERADE
 
-# [Peer] section should be added manually for each client
 EOF
-
+    
+    # Ask for the client's public key
+    read -p "Enter client's public key: " CLIENT_PUBLIC_KEY
+    
+    # Add the peer configuration to the wg0.conf file
+    echo "" >> /etc/wireguard/wg0.conf
+    echo "[Peer]" >> /etc/wireguard/wg0.conf
+    echo "PublicKey = $CLIENT_PUBLIC_KEY" >> /etc/wireguard/wg0.conf
+    echo "AllowedIPs = $CLIENT_IP/32" >> /etc/wireguard/wg0.conf
+    
     chmod 600 /etc/wireguard/wg0.conf
     success_message "Configuration file created successfully"
 
@@ -154,11 +193,16 @@ EOF
         exit 1
     fi
 
+    separator "Actual Interface"
+    wg show wg0
+
     separator "Setup Complete"
     success_message "WireGuard server setup completed successfully!"
+    info_message "Public Server IP: $IP_PUBLIC"
+    info_message "WireGuard port: 51820"
     info_message "Server public key: $(cat publickey)"
-    info_message "To add clients, edit /etc/wireguard/wg0.conf and add [Peer] sections"
-    wg show wg0
+    info_message "Client private ip inside VPN: $CLIENT_IP"
+    info_message "To add more clients, edit /etc/wireguard/wg0.conf and add more [Peer] sections"
 }
 
 # Main execution

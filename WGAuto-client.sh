@@ -46,6 +46,14 @@ separator() {
     echo -e "${CYAN}=============================================================${RESET}\n"
 }
 
+# Function to check if running as root
+check_root() {
+    if [ "$EUID" -ne 0 ]; then 
+        error_message "Please run as root"
+        exit 1
+    fi
+}
+
 # Function to validate IP address
 validate_ip() {
     local ip=$1
@@ -66,16 +74,39 @@ validate_port() {
     fi
 }
 
+get_public_ip() {
+    local public_ip=$(curl -s https://api.ipify.org)
+    
+    if [ -z "$public_ip" ]; then
+        error_message "Failed to determine public IP address"
+        exit 1
+    fi
+    
+    echo "$public_ip"
+}
+
 # Function to setup WireGuard client
 setup_wireguard_client() {
 
-   separator "System Update"
+    separator "System Update"
     info_message "Updating system packages..."
     apt update && apt upgrade -y || {
         error_message "System update failed"
         exit 1
     }
     success_message "System updated successfully"
+
+    separator "installation of dependencies"
+    info_message "Installing dependencies..."
+    apt install curl -y || {
+        error_message "curl install failed"
+        exit 1
+    }
+    apt apt install resolvconf -y || {
+        error_message "curl install failed"
+        exit 1
+    }
+    success_message "installation of dependencies successfully"
 
     separator "WireGuard Client Setup"
 
@@ -99,8 +130,34 @@ setup_wireguard_client() {
         success_message "WireGuard installed successfully"
     fi
 
+    # Generate client keys
+    separator "Key Generation"
+    info_message "Generating client keys..."
+    CLIENT_DIR="/etc/wireguard"
+    mkdir -p "$CLIENT_DIR"
+
+    cd "$CLIENT_DIR" || {
+        error_message "Failed to access $CLIENT_DIR"
+        exit 1
+    }
+
+    wg genkey | tee privatekey | wg pubkey > publickey
+    local CLIENT_PRIVATE_KEY=$(cat privatekey)
+    local CLIENT_PUBLIC_KEY=$(cat publickey)
+    
+    # Display the client's public key
+     info_message "Client public key: $CLIENT_PUBLIC_KEY"
+
     # Get server information
     separator "Server Information"
+    
+    # Prompt user about server setup
+    read -p "At this moment, your server must be configured. If this is your reality, write Yes to continue: " PROCEED
+    if [[ "$PROCEED" != "Yes" && "$PROCEED" != "yes" ]]; then
+        error_message "Setup aborted by user."
+        exit 1
+    fi
+
     read -p "Enter server public IP: " SERVER_IP
     if ! validate_ip "$SERVER_IP"; then
         error_message "Invalid IP address format"
@@ -120,27 +177,19 @@ setup_wireguard_client() {
         exit 1
     fi
 
-    # Create client configuration directory
-    separator "Client Configuration"
-    CLIENT_DIR="/etc/wireguard"
-    mkdir -p "$CLIENT_DIR"
-
-    # Generate client keys
-    info_message "Generating client keys..."
-    cd "$CLIENT_DIR" || {
-        error_message "Failed to access $CLIENT_DIR"
+        read -p "Enter client private ip inside VPN: " PRIVATE_IP
+    if [ -z "$PRIVATE_IP" ]; then
+        error_message "Server public key cannot be empty"
         exit 1
-    }
+    fi
 
-    wg genkey | tee privatekey | wg pubkey > publickey
-    local PRIVATE_KEY=$(cat privatekey)
-    
     # Create client configuration
+    separator "Client Configuration"
     info_message "Creating client configuration..."
     cat > "$CLIENT_DIR/wg0.conf" << EOF
 [Interface]
-PrivateKey = ${PRIVATE_KEY}
-Address = 10.10.10.2/24
+PrivateKey = ${CLIENT_PRIVATE_KEY}
+Address = ${$PRIVATE_IP}
 DNS = 8.8.8.8, 8.8.4.4
 
 [Peer]
@@ -166,18 +215,18 @@ EOF
         exit 1
     fi
 
+    separator "Actual Interface"
+    wg show wg0
+
+    local IP_PUBLIC=$(get_public_ip)
+
     separator "Setup Complete"
     success_message "WireGuard client setup completed successfully!"
-    info_message "Client public key: $(cat publickey)"
     info_message "Configuration file location: $CLIENT_DIR/wg0.conf"
-    wg show wg0
+    info_message "My actual IP: $IP_PUBLIC"
+
 }
 
-# Check if running as root
-if [ "$EUID" -ne 0 ]; then 
-    error_message "Please run as root"
-    exit 1
-fi
-
 # Main execution
+check_root
 setup_wireguard_client
