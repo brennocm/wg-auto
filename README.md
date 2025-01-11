@@ -1,6 +1,6 @@
 
 <div align="center">
-    <img src="images/logo-wgauto.png" alt="logo" width="200px">
+    <img src="other/logo-wgauto.png" alt="logo" width="200px">
    <br><br>
     <h1 align="center"> WG-Auto: Automating WireGuard VPN setup</h1>
 </div>
@@ -26,12 +26,6 @@ WG-Auto is a tool designed to simplify and automate the installation and configu
 
 <br>
 
-<div align="center">
-    <img src="images/banner.png" alt="banner" width="80%">
-</div>
-
-<br>
-
 ### How to Use?
 
 ##### Requirements
@@ -45,7 +39,7 @@ Clone the repository:
 git clone https://github.com/brennocm/wg-auto.git
 ```
 
-###### In server
+#### In server
 
 Run the server setup script:
 ```bash
@@ -61,7 +55,7 @@ Run the script with administrative permissions:
 sudo ./wg-auto-server.sh
 ```
 
-###### In client
+#### In client
 
 Navigate to the project directory:
 ```bash
@@ -106,6 +100,14 @@ AllowedIPs = 0.0.0.0/0
 Endpoint = <Server_IP>:51820
 PersistentKeepalive = 25
 ```
+
+### Usage process
+
+<br>
+
+<video controls>
+  <source src="other/example-video.mp4" type="video/mp4">
+</video>
 
 ### Notes
 
