@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# DNS servers used inside the VPN, separated by spaces. Default: Quad9 (no logging of
+# client IPs). Override with: sudo WG_DNS="1.1.1.1 1.0.0.1" ./WGAuto-client.sh
+WG_DNS="${WG_DNS:-9.9.9.9 149.112.112.112}"
+
 cat << "EOF"
 ╔═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
 
@@ -95,7 +99,10 @@ configure_resolvconf() {
     systemctl stop systemd-resolved
     systemctl disable systemd-resolved
     
-    echo -e "nameserver 8.8.8.8\nnameserver 1.1.1.1" > /etc/resolv.conf
+    : > /etc/resolv.conf
+    for server in $WG_DNS; do
+        echo "nameserver $server" >> /etc/resolv.conf
+    done
 
     systemctl enable resolvconf
     systemctl start resolvconf
@@ -216,7 +223,7 @@ setup_wireguard_client() {
 [Interface]
 PrivateKey = ${CLIENT_PRIVATE_KEY}
 Address = ${PRIVATE_IP}
-DNS = 8.8.8.8, 8.8.4.4
+DNS = ${WG_DNS// /, }
 
 [Peer]
 PublicKey = ${SERVER_PUBKEY}
