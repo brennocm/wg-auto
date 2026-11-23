@@ -1,111 +1,55 @@
-
 <div align="center">
-    <img src="src/logo-wgauto.png" alt="logo" width="200px">
-   <br><br>
-    <h1 align="center"> WG-Auto: Automating WireGuard VPN setup</h1>
+  <img src="src/logo-wgauto.png" alt="wg-auto" width="200">
+  <h1>wg-auto</h1>
 </div>
 
-WG-Auto is a tool designed to simplify and automate the installation and configuration of the WireGuard VPN, for servers and clients. With this script, you can quickly and efficiently set up your VPN without the need to manually configure each component.
+Two scripts that set up a WireGuard VPN between a Debian or Ubuntu server and one client: they install WireGuard, generate the keys, write `/etc/wireguard/wg0.conf` on both sides and start `wg-quick@wg0`. All of the client's traffic then goes through the server.
 
-### Features
-- System Update: Automatically updates essential packages before starting the installation;
-- WireGuard Installation: Installs the WireGuard package and verifies if the kernel module is loaded;
-- Automated Configuration: Automatically generates keys and configuration files for server and client;
-- IP Forwarding Configuration: Enables IP forwarding on the server and applies firewall rules using iptables;
-- WireGuard Service: Configures and starts the WireGuard service on both server and client.
+## Requirements
 
-##### Server Features 
-*   `Server Configuration`: Generates private and public keys and configures the server with an internal IP address;
-*   `Firewall`: Applies NAT rules to forward VPN traffic to the main interface;
-*   `Client Configuration Generation`: Provides guidance for adding [Peer] sections to the server configuration file.
+- Debian or Ubuntu on both machines, run as root (`sudo`).
+- UDP port 51820 open on the server (in the cloud provider's firewall too).
+- Both scripts run `apt upgrade -y` first.
 
-##### Client Features
-*   `Client Configuration`: Generates private and public keys and configurations to connect to the WireGuard server;
-*   `Validators`: Ensures that the server IP address, port, and public key are provided in the correct format;
-*   `Default DNS`: Configures default DNS to resolve domain names within the VPN.
+## Usage
 
-<br>
+The server needs the client's public key and the client needs the server's, so run them side by side:
 
-### How to Use?
+1. **Client:** start the script. It prints the client's public key and waits.
+   ```bash
+   git clone https://github.com/brennocm/wg-auto.git && cd wg-auto
+   sudo bash WGAuto-client.sh
+   ```
+2. **Server:** run the server script and paste the client's public key when asked.
+   ```bash
+   git clone https://github.com/brennocm/wg-auto.git && cd wg-auto
+   sudo bash WGAuto-server.sh
+   ```
+   At the end it runs `wg show wg0`; copy the server's public key from there.
+3. **Client:** answer `yes`, then give the server's public IP, port (default 51820), public key, and the client's address inside the VPN: `10.10.10.2/24`.
 
-##### Requirements
-*   `Administrative Permissions`: Ensure the user has administrative permissions to run the scripts;
-*   `Supported Distributions`: Tested on Debian-based distributions (like Ubuntu).
+Check from the client: `sudo wg show` lists a recent handshake, and `curl https://api.ipify.org` shows the server's IP. To turn the VPN off and on: `sudo wg-quick down wg0` / `sudo wg-quick up wg0`.
 
-<br>
+A walkthrough video is on [YouTube](https://youtu.be/Nr_En-eo2c0).
 
-Clone the repository:
-```bash
-git clone https://github.com/brennocm/wg-auto.git
-```
+## What it changes
 
-#### In server
+| Machine | Changes |
+| --- | --- |
+| Server | Installs `wireguard`, enables IP forwarding in `/etc/sysctl.conf`, creates `wg0` at `10.10.10.1/24` with NAT (iptables `MASQUERADE`) to the main interface, adds the client as a peer at `10.10.10.2/32`. |
+| Client | Installs `wireguard` and `resolvconf`, **disables `systemd-resolved`**, routes all IPv4 traffic (`0.0.0.0/0`) through the tunnel. |
 
-Run the server setup script:
-```bash
-cd wg-auto
-```
-Make the script executable:
-```bash
-chmod +x wg-auto-server.sh
-```
-
-Run the script with administrative permissions:
-```bash
-sudo ./wg-auto-server.sh
-```
-
-#### In client
-
-Navigate to the project directory:
-```bash
-cd wg-auto
-```
-
-Make the script executable::
-```bash
-chmod +x wg-auto-client.sh
-```
-
-Run the script with administrative permissions::
-```bash
-sudo ./wg-auto-client.sh
-```
-
-### Configuration File Structure
-
-Server (/etc/wireguard/wg0.conf)
-```bash
-[Interface]
-PrivateKey = <Server Private Key>
-Address = 10.10.10.1/24
-ListenPort = 51820
-PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o <Main_Interface> -j MASQUERADE
-PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o <Main_Interface> -j MASQUERADE
-
-# Add [Peer] sections for each client here
-```
-
-Client (/etc/wireguard/wg0.conf)
+**DNS.** The client uses Quad9 (`9.9.9.9`, `149.112.112.112`) inside the VPN. To use other servers:
 
 ```bash
-[Interface]
-PrivateKey = <Client Private Key>
-Address = 10.10.10.2/24
-DNS = 8.8.8.8, 8.8.4.4
-
-[Peer]
-PublicKey = <Server Public Key>
-AllowedIPs = 0.0.0.0/0
-Endpoint = <Server_IP>:51820
-PersistentKeepalive = 25
+sudo WG_DNS="1.1.1.1 1.0.0.1" bash WGAuto-client.sh
 ```
 
-### Usage process
+## Limits
 
-[Video usage process](https://youtu.be/Nr_En-eo2c0)
+- One client per run. For more clients, add a `[Peer]` with the new public key and a new address (`10.10.10.3/32`, …) to the server's `wg0.conf` and restart `wg-quick@wg0`.
+- IPv4 only; IPv6 traffic does not go through the tunnel.
 
-### Notes
+## License
 
-* Ensure WireGuard is installed on both the server and client before running the scripts.
-* Adjust firewall settings as needed to meet your network security policies.
+[MIT](LICENSE)
